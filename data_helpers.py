@@ -10,7 +10,7 @@ class Dataset(object):
 		self.chars = dict(zip(list(init_chars), range(len(init_chars))))
 		self.num_of_labels = len(self.chars)
 
-	def batch_generator(self, batch_size=50, batch_num=1):
+	def batch_generator(self, batch_size=50, batch_num=20000):
 		for _ in range(batch_num):
 			data = []
 			labels = []
