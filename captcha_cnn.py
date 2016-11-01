@@ -71,10 +71,11 @@ class CaptchaCNN(object):
 		# predictions shape = ? [[9,6,7,4,5,14], [4,8,4,7,2, 19]] 二维
 
 		with tf.name_scope('loss'):
-			# self.labels 是每个单独字符的label, 二维[[3,8,5,1,0,2], [4,9,4,1,8,7]]
-			base_indices = tf.range(0, 6 * num_of_labels, num_of_labels)
-			self.correct_indices = tf.add(base_indices, self.labels)
-			correct_scores = tf.gather(self.scores, self.correct_indices)
+			# self.labels 是每个单独字符的label, 二维[[3,8,5,1,0,2], [4,9,4,1,8,7]] # num_of_labels = 44暂定
+			correct_indices = tf.range(0, 6) * num_of_labels + self.label
+			# range得到的是一个一维array，label是一个二维array，broadcast之后correct_indices是一个二维array，
+			# self.correct_indices = tf.add(base_indices, self.labels)
+			correct_scores = tf.gather_nd(self.scores, correct_indices)
 			self.loss = tf.reduce_sum(-tf.log(correct_scores), reduction_indices=1)
 			self.reduced_loss = tf.reduce_mean(self.loss)
 

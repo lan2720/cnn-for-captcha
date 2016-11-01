@@ -68,13 +68,14 @@ with tf.Graph().as_default():
 				model.labels: y_batch
 			}
 
-			_, step, scores, predictions = sess.run(
-				[train_op, global_step, model.scores, model.predictions], feed_dict)
-			# time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
-			# print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+			_, step, scores, predictions, accuracy, loss = sess.run(
+				[train_op, global_step, model.scores, model.predictions, model.accuracy, model.reduced_loss], feed_dict)
+			time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
+			print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
 			# train_summary_writer.add_summary(summaries, step)
 			print scores.shape
 			print predictions.shape
+			print accuracy
 
 
 		# Generate batches
