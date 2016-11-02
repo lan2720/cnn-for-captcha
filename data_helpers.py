@@ -16,14 +16,17 @@ class Dataset(object):
 		batch_num = self.count / batch_size
 		if self.count % batch_num:
 			batch_num += 1
-		for _ in range(batch_num):
+		for i in range(batch_num):
 			data = []
 			labels = []
-			for _ in range(batch_size):
+			for j in range(batch_size):
 				code_img, code_str = create_validate_code()
-				# print "1st line:", [code_img.convert('RGB').getpixel((i, 0)) for i in range(96)]
-				# image to array
-				data.append(self.img2array(binarization(code_img)))
+				# binarize and image to array
+				binarized_img = binarization(code_img)
+				# binarized_img.save("{}_{}.jpg".format(i, j))
+				# newimage = code_img.convert('L')
+				# newimage.save("{}_{}.jpg".format(i, j))
+				data.append(self.img2array(binarized_img))
 				labels.append(map(lambda i: self.indices[i], list(code_str)))  # (self.str2onehot(code_str))
 			# code str to one-hot array
 			yield np.asarray(data), np.asarray(labels)
@@ -34,8 +37,6 @@ class Dataset(object):
 		:return: np array
 		"""
 		width, height = img.size
-		# newimage = img.convert('L')
-		# newimage = Image.
 		return np.array(list(img.getdata())).reshape((height, width, -1)) / 255.0
 
 	def str2onehot(self, label_str):
@@ -52,8 +53,9 @@ class Dataset(object):
 
 
 if __name__ == '__main__':
-	dataset = Dataset()
+	dataset = Dataset(data_size=1)
 	epochs = 1
 	for _ in range(epochs):
-		for x, y in dataset.batch_generator(batch_size=1, batch_num=1):
-			print x.shape, y.shape
+		for x, y in dataset.batch_generator(batch_size=1):
+			for row in range(25):
+				print x[0][row].tolist()

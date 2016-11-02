@@ -12,18 +12,23 @@ tf.flags.DEFINE_float("init_learning_rate", 1e-2, "The initial learning rate")
 # Misc Parameters
 tf.flags.DEFINE_string("checkpoint", '', "Resume checkpoint")
 
+tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
+
+
 FLAGS = tf.flags.FLAGS
 
 dataset = Dataset(data_size=100000000000)
 
 with tf.Graph().as_default():
-	sess = tf.Session()
+	session_conf = tf.ConfigProto(
+		log_device_placement=FLAGS.log_device_placement)
+	sess = tf.Session(config=session_conf)
 	with sess.as_default():
 		model = CaptchaCNN(img_width=96,
 						   img_height=25,
 						   num_of_labels=dataset.num_of_labels,
 						   filter_sizes=[2, 2, 2],
-						   num_filters=[48, 64, 128],
+						   num_filters=[54, 54, 54],
 						   maxpool_sizes=[2, 2, 2],
 						   hidden_size=3072)
 
@@ -32,6 +37,8 @@ with tf.Graph().as_default():
 		# optimizer = tf.train.AdamOptimizer(1e-3, epsilon=1e-6)
 		optimizer = tf.train.AdamOptimizer(FLAGS.init_learning_rate)
 		grads_and_vars = optimizer.compute_gradients(model.reduced_loss)
+		# print "trainable variables:"
+		# print tf.trainable_variables()
 		train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
 
 		# Output directory for models and summaries
@@ -69,18 +76,19 @@ with tf.Graph().as_default():
 				model.labels: y_batch
 			}
 
-			_, step, summaries, accuracy, loss = sess.run(
-				[train_op, global_step, train_summary_op, model.accuracy, model.reduced_loss], feed_dict)
+			_, step, summaries, accuracy, loss, scores, predictions = sess.run(
+				[train_op, global_step, train_summary_op, model.accuracy, model.reduced_loss, model.scores,
+				 model.predictions], feed_dict)
 			time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
-			# for pred, truth in zip(predictions.tolist(), y_batch.tolist()):
-			# 	print("{}  {}".format("".join([dataset.chars[i] for i in pred]), "".join([dataset.chars[i] for i in truth])))
+			print scores.shape
+			print predictions.shape
+			for pred, truth in zip(predictions.tolist(), y_batch.tolist())[:10]:
+				print(
+				"{}  {}".format("".join([dataset.chars[i] for i in pred]), "".join([dataset.chars[i] for i in truth])))
 
 			print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
 
 			train_summary_writer.add_summary(summaries, step)
-		# print scores.shape
-		# print predictions.shape
-		# print accuracy
 
 
 		# Generate batches
