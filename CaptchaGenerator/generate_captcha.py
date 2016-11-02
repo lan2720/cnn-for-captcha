@@ -132,17 +132,17 @@ def create_strs(draw, chars, char_length, font_type, font_size, width, height, f
 	return ''.join(c_chars)
 
 
-# def binarization(image):
-# 	binarized_img = Image.new("L", size=image.size)
-# 	for i in range(image.size[0]):
-# 		for j in range(image.size[1]):
-# 			r, g, b = image.convert('RGB').getpixel((i, j))
-# 			value = int(0.299*r + 0.587*g + 0.114*b)
-# 			if value < 180:
-# 				binarized_img.putpixel((i, j), 255)
-# 			else:
-# 				binarized_img.putpixel((i, j), 0)
-# 	return binarized_img
+def binarization(image):
+	binarized_img = Image.new("L", size=image.size)
+	for i in range(image.size[0]):
+		for j in range(image.size[1]):
+			r, g, b = image.convert('RGB').getpixel((i, j))
+			value = int(0.299 * r + 0.587 * g + 0.114 * b)
+			if value < 180:
+				binarized_img.putpixel((i, j), 255)
+			else:
+				binarized_img.putpixel((i, j), 0)
+	return binarized_img
 
 
 if __name__ == "__main__":
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
 	test_image = Image.open(
 		"/home/lan/Desktop/test1.jpg")  # /home/lan/PycharmProjects/cnn-for-captcha/CaptchaGenerator/mycaptchas/5WMn6m.jpg
-	# binarization(test_image).save("/home/lan/Desktop/test_bi.jpg")
-	newimage = test_image.convert('L')  # .save("/home/lan/Desktop/test_bi.jpg")
-	print newimage.mode
-	print np.array(list(newimage.getdata()))[:100]
+	binarization(test_image).save("/home/lan/Desktop/test_bi.jpg")
+# newimage = test_image.convert('L')  # .save("/home/lan/Desktop/test_bi.jpg")
+# print newimage.mode
+# print np.array(list(newimage.getdata()))[:100]
