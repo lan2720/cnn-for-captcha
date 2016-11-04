@@ -1,5 +1,8 @@
 *.zip
 *.pyc
+*.npy
+*.npz
 .ideas/
 runs/
+dataset/
 CaptchaGenerator/mycaptchas/

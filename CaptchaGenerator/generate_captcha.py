@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # abcdefghjkmnpqrstuvwxy
-_letter_cases = "abdefghmnpqrstvwxyz"  # 小写字母，去除可能干扰的c i j k l o u v
+_letter_cases = "abdefghmnpqrstwxyz"  # 小写字母，去除可能干扰的c i j k l o u v
 _upper_cases = "ABDEFHMNPQRSTWXYZ"  # 大写字母，去除可能干扰的C G I J K L O U V
 _numbers = ''.join(map(str, range(2, 10)))  # 数字，去除0，1
 init_chars = ''.join((_letter_cases, _upper_cases, _numbers))
@@ -22,8 +22,6 @@ BLACK = (0, 0, 0)
 
 def create_validate_code(size=(96, 25),
 						 chars=init_chars,
-						 img_type="jpg",
-						 mode="RGB",
 						 bg_image=bg_image,
 						 fg_color=(255, 255, 255),
 						 font_size=19,
@@ -146,30 +144,6 @@ def binarization(image):
 
 
 if __name__ == "__main__":
-	# if os.path.exists(out_dir):
-	# 	shutil.rmtree(out_dir)
-	# os.makedirs(out_dir)
-	# for _ in range(500):
-	# 	code_img, code_str = create_validate_code()
-	# 	code_img.save("%s/%s.jpg" % (out_dir, code_str))
-
-
-	# img = Image.open('mycaptchas/2FA8h5.jpg')
-	# binarization(img).save("hhh.jpg")
-
-	# binarization_dir = os.path.join(current_dir, "binarization")
-	# if os.path.exists(binarization_dir):
-	# 	shutil.rmtree(binarization_dir)
-	# os.makedirs(binarization_dir)
-	# for fn in glob.glob(os.path.join(out_dir, "*.jpg")):
-	# 	img = Image.open(fn)
-	# 	newfn = fn.split("/")[-1]
-	#
-	# 	binarization(img).save(os.path.join(binarization_dir, newfn))
-
 	test_image = Image.open(
 		"/home/lan/Desktop/test1.jpg")  # /home/lan/PycharmProjects/cnn-for-captcha/CaptchaGenerator/mycaptchas/5WMn6m.jpg
 	binarization(test_image).save("/home/lan/Desktop/test_bi.jpg")
-# newimage = test_image.convert('L')  # .save("/home/lan/Desktop/test_bi.jpg")
-# print newimage.mode
-# print np.array(list(newimage.getdata()))[:100]
