@@ -1,108 +1,158 @@
 # coding=utf-8
 """
 仿照tensorflow/models/image/cifar10/cifar10_input.py的处理方法生产验证码图片数据
+将自己的数据集转成Standard TensorFlow format
+参考：https://www.tensorflow.org/versions/r0.11/how_tos/reading_data/index.html#file-formats
+参考代码：https://github.com/tensorflow/tensorflow/blob/r0.11/tensorflow/examples/how_tos/reading_data/convert_to_records.py
 """
 
+from __future__ import print_function
+
 import os
-import glob
 import tensorflow as tf
+from captcha import read_data_sets
+from captcha import DATA_BATCHES_DIR, TRAIN_SIZE, VALIDATION_SIZE, TEST_SIZE
+
+TFRecord_dir = os.path.join(os.path.dirname(__file__), "tfrecords")
 
 
-def read_captcha(filename_queue):
-	"""Reads and parses examples from Captcha data files.
-
-	Recommendation: if you want N-way read parallelism, call this function
-	N times.  This will give you N independent Readers reading different
-	files & positions within those files, which will give better mixing of
-	examples.
-
-	Args:
-		filename_queue: A queue of strings with the filenames to read from.
-
-	Returns:
-	An object representing a single example, with the following fields:
-		height: number of rows in the result (32)
-		width: number of columns in the result (32)
-		depth: number of color channels in the result (3)
-		key: a scalar string Tensor describing the filename & record number
-			for this example.
-		label: an int32 Tensor with the label in the range 0..9.
-		uint8image: a [height, width, depth] uint8 Tensor with the image data
-	"""
-
-	class CaptchaRecord(object):
-		pass
-
-	result = CaptchaRecord()
-
-	# Dimensions of the images in the CIFAR-10 dataset.
-	# See http://www.cs.toronto.edu/~kriz/cifar.html for a description of the
-	# input format.
-	label_bytes = 1  # 2 for CIFAR-100
-	result.height = 25
-	result.width = 96
-	result.depth = 1
-	image_bytes = result.height * result.width * result.depth
-	# Every record consists of a label followed by the image, with a
-	# fixed number of bytes for each.
-	record_bytes = label_bytes + image_bytes
+def _int64_feature(value):
+	return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
-def distorted_inputs(data_dir, batch_size, num_epochs=50, shuffle=True):
-	"""Construct preprocessed input for Captcha training using the Reader ops.
+def _int64_list_feature(value):
+	return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
-	Args:
-		data_dir: Path to the raw pics data directory.
-		batch_size: Number of images per batch.
 
-	Returns:
-		images: Images. 4D tensor of [batch_size, height, width, 3] size.
-		labels: Labels. 1D tensor of [batch_size, num_of_labels] size. (one hot)
-	"""
-	# filenames = [os.path.join(data_dir, 'data_batch_%d.bin' % i)
-	#              for i in xrange(1, 6)]
-	# for f in filenames:
-	#     if not tf.gfile.Exists(f):
-	#         raise ValueError('Failed to find file: ' + f)
+def _bytes_feature(value):
+	return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-	# Create a queue that produces the filenames to read.
-	filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(os.path.join(data_dir, "*.jpg")),
-	                                                num_epochs=num_epochs, shuffle=shuffle)
 
-	# Read examples from files in the filename queue.
-	read_input = read_captcha(filename_queue)
-	reshaped_image = tf.cast(read_input.uint8image, tf.float32)
+def convert_to(data_set, name):
+	"""将DataSet类中的信息写入TFRecord file"""
+	if not os.path.exists(TFRecord_dir):
+		os.makedirs(TFRecord_dir)
 
-	height = IMAGE_SIZE
-	width = IMAGE_SIZE
+	images = data_set.images
+	labels = data_set.labels
+	num_examples = data_set.num_examples
 
-	# Image processing for training the network. Note the many random
-	# distortions applied to the image.
+	if images.shape[0] != num_examples:
+		raise ValueError('Image size %d dose not match dataset size %d.' %
+		                 (images.shape[0], num_examples))
+	rows = images.shape[1]
+	cols = images.shape[2]
+	depth = images.shape[3]
+	label_dim = labels.shape[1]
 
-	# Randomly crop a [height, width] section of the image.
-	distorted_image = tf.random_crop(reshaped_image, [height, width, 3])
+	filename = os.path.join(TFRecord_dir, name + '.tfrecords')
+	print("Writing", filename)
+	writer = tf.python_io.TFRecordWriter(filename)
+	for index in range(num_examples):
+		image_raw = images[index].tostring()
+		label_raw = labels[index].tostring()  # a list of size `num_of_labels` or `num_of_labels*num_of_classes`
+		example = tf.train.Example(features=tf.train.Features(feature={
+			'height': _int64_feature(rows),
+			'width': _int64_feature(cols),
+			'depth': _int64_feature(depth),
+			'label_dim': _int64_feature(label_dim),
+			'label_raw': _bytes_feature(label_raw),
+			'image_raw': _bytes_feature(image_raw)
+		}))
+		writer.write(example.SerializeToString())
+	writer.close()
 
-	# Randomly flip the image horizontally.
-	distorted_image = tf.image.random_flip_left_right(distorted_image)
 
-	# Because these operations are not commutative, consider randomizing
-	# the order their operation.
-	distorted_image = tf.image.random_brightness(distorted_image,
-	                                             max_delta=63)
-	distorted_image = tf.image.random_contrast(distorted_image,
-	                                           lower=0.2, upper=1.8)
+def read_and_decode(filename_queue):
+	reader = tf.TFRecordReader()
+	_, serialized_example = reader.read(filename_queue)
+	features = tf.parse_single_example(
+		serialized_example,
+		# Defaults are not specified since both keys are required.
+		features={
+			'height': tf.FixedLenFeature([], tf.int64),
+			'width': tf.FixedLenFeature([], tf.int64),
+			'depth': tf.FixedLenFeature([], tf.int64),
+			'label_dim': tf.FixedLenFeature([], tf.int64),
+			'image_raw': tf.FixedLenFeature([], tf.string),
+			'label_raw': tf.FixedLenFeature([], tf.string),
+		})
 
-	# Subtract off the mean and divide by the variance of the pixels.
-	float_image = tf.image.per_image_whitening(distorted_image)
+	image = tf.decode_raw(features['image_raw'], tf.uint8)
+	label = tf.decode_raw(features['label_raw'], tf.int32)
+	height = tf.cast(features['height'], tf.int32)
+	width = tf.cast(features['width'], tf.int32)
+	depth = tf.cast(features['depth'], tf.int32)
+	label_dim = tf.cast(features['label_dim'], tf.int32)
+	return image, label, height, width, depth, label_dim
 
-	# Ensure that the random shuffling has good mixing properties.
+
+# 写数据主函数
+def generate_datasets_tfrecords(data_dir, one_hot, validation_size=VALIDATION_SIZE):
+	data_sets = read_data_sets(data_dir, one_hot=one_hot, validation_size=validation_size)
+	# Convert to Examples and write the result to TFRecords
+	convert_to(data_sets.train, 'train')
+	convert_to(data_sets.validation, 'validation')
+	convert_to(data_sets.test, 'test')
+
+
+# 读数据主函数
+def preprocessed_inputs(data_dir, one_hot, batch_size):
+	filename_queue = tf.train.string_input_producer(
+		tf.train.match_filenames_once(os.path.join(data_dir, "*.tfrecords"))
+	)
+	image, label, height, width, depth, label_dim = read_and_decode(filename_queue)
+	float_image = tf.cast(image, tf.float32)
+	reshaped_image = tf.reshape(float_image, tf.pack([height, width, depth]))
+	reshaped_image.set_shape([25, 96, 3])
+	reshaped_label = tf.reshape(label, [label_dim])
+	if one_hot:
+		reshaped_label.set_shape([258])
+	else:
+		reshaped_label.set_shape([6])
+	normalized_image = tf.image.per_image_whitening(reshaped_image)
+
 	min_fraction_of_examples_in_queue = 0.4
-	min_queue_examples = int(NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN *
+	min_queue_examples = int(TRAIN_SIZE *
 	                         min_fraction_of_examples_in_queue)
-	print ('Filling queue with %d CIFAR images before starting to train. '
-	       'This will take a few minutes.' % min_queue_examples)
+	print('Filling queue with %d captcha images before starting to train. '
+	      'This will take a few minutes.' % min_queue_examples)
 
-	# Generate a batch of images and labels by building up a queue of examples.
-	return _generate_image_and_label_batch(float_image, read_input.label,
-	                                       min_queue_examples, batch_size,
-	                                       shuffle=True)
+	return _generate_images_and_labels_batch(normalized_image, label,
+	                                         min_queue_examples, batch_size, shuffle=True)
+
+
+def _generate_images_and_labels_batch(image, label, min_queue_examples,
+                                      batch_size, shuffle):
+	num_preprocess_threads = 16
+	if shuffle:
+		images, label_batch = tf.train.shuffle_batch(
+			[image, label],
+			batch_size=batch_size,
+			num_threads=num_preprocess_threads,
+			capacity=min_queue_examples + 3 * batch_size,
+			min_after_dequeue=min_queue_examples
+		)
+	else:
+		images, label_batch = tf.train.batch(
+			[image, label],
+			batch_size=batch_size,
+			num_threads=num_preprocess_threads,
+			capacity=min_queue_examples + 3 * batch_size
+		)
+
+	# Display the training images in the visulizer
+	tf.image_summary('images', images)
+	return images, tf.reshape(label_batch, [batch_size, -1])
+
+
+def main():
+	# datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=True)
+	# generate_datasets_tfrecords(DATA_BATCHES_DIR, one_hot=True)
+	images_batch, labels_batch = preprocessed_inputs(DATA_BATCHES_DIR, one_hot=True, batch_size=50)
+	print("images_batch shape: %s", images_batch.shape)
+	print("labels_batch shape: %s", labels_batch.shape)
+
+
+if __name__ == '__main__':
+	main()

@@ -11,6 +11,7 @@ from __future__ import absolute_import
 import os
 import glob
 import cPickle
+import shutil
 import numpy as np
 from tensorflow.contrib.learn.python.learn.datasets import base
 from CaptchaGenerator.generate_captcha import create_validate_code
@@ -20,7 +21,11 @@ _upper_cases = "ABDEFHMNPQRSTWXYZ"  # 大写字母，去除可能干扰的C G I 
 _numbers = ''.join(map(str, range(2, 10)))  # 数字，去除0，1 (8)
 init_chars = ''.join((_letter_cases, _upper_cases, _numbers))
 chars = dict(zip(init_chars, range(len(init_chars))))
+
 BATCH_SIZE = 10000
+TRAIN_SIZE = 20000
+VALIDATION_SIZE = 5000
+TEST_SIZE = 10000
 DATA_BATCHES_DIR = os.path.join(os.path.dirname(__file__), "data-batches-py")
 
 
@@ -37,13 +42,21 @@ def dump_batch(filename):
 	cPickle.dump(d, open(os.path.join(DATA_BATCHES_DIR, filename), "wb"))
 
 
-def generate_data_sets(train_size=100000, test_size=10000):
+# 生成数据
+def generate_data_sets(train_size=TRAIN_SIZE, test_size=TEST_SIZE):
 	if train_size % BATCH_SIZE:
-		raise Exception("The value of train_size need to the times of BATCH_SIZE = %d" % BATCH_SIZE)
+		raise Exception(
+			"The value of train_size need to the times of BATCH_SIZE = %d"
+			% BATCH_SIZE)
 	if test_size % BATCH_SIZE:
-		raise Exception("The value of test_size need to the times of BATCH_SIZE = %d" % BATCH_SIZE)
-	if not os.path.exists(DATA_BATCHES_DIR):
-		os.makedirs(DATA_BATCHES_DIR)
+		raise Exception(
+			"The value of test_size need to the times of BATCH_SIZE = %d"
+			% BATCH_SIZE)
+	if os.path.exists(DATA_BATCHES_DIR):
+		shutil.rmtree(DATA_BATCHES_DIR)
+	os.makedirs(DATA_BATCHES_DIR)
+	print("Generating raw data, train %d test %d to %s"
+	      % (train_size, test_size, DATA_BATCHES_DIR))
 	# train data
 	for i in range(1, (train_size / BATCH_SIZE) + 1):
 		filename = "data_batch_{}".format(i)
@@ -71,7 +84,7 @@ def show_image(img_arr):
 # 主函数
 def read_data_sets(data_dir,
                    one_hot=False,
-                   validation_size=5000):
+                   validation_size=VALIDATION_SIZE):
 	TRAIN_DATA = glob.glob(os.path.join(data_dir, "data_batch_*"))
 	TEST_DATA = glob.glob(os.path.join(data_dir, "test_batch"))
 
@@ -184,7 +197,8 @@ class DataSet(object):
 
 
 def main():
-	datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=False)
+	# generate_data_sets()
+	datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=True)
 	print(datasets.train.labels.shape)
 	print(datasets.validation.labels.shape)
 	print(datasets.test.labels.shape)
