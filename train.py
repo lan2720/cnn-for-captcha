@@ -9,7 +9,7 @@ from data_helpers import Dataset
 from captcha_cnn import CaptchaCNN
 
 # Model Hyperparameters
-tf.flags.DEFINE_float("init_learning_rate", 1e-3, "The initial learning rate")
+tf.flags.DEFINE_float("init_learning_rate", 1e-4, "The initial learning rate")
 # Misc Parameters
 tf.flags.DEFINE_string("checkpoint", '', "Resume checkpoint")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model every certain steps (default: 100)")
@@ -22,8 +22,8 @@ print("Loading dataset...")
 dataset = Dataset(extfile="150000.npz")
 X = dataset.images  # (149998, 25, 96, 3)
 y = dataset.labels  # (149998, 258)
-X_train, X_test = X[:-100], X[-100:]
-y_train, y_test = y[:-100], y[-100:]
+X_train, X_test = X[:50000], X[-100:]
+y_train, y_test = y[:50000], y[-100:]
 # normalize( only compute mean and std on trainset)
 X_mean = np.mean(X_train, axis=0)
 X_std = np.std(X_train, axis=0)
