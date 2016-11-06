@@ -77,7 +77,7 @@ def unpickle(fn):
 
 
 def show_image(img_arr):
-    import Image
+    from PIL import Image
     Image.fromarray(img_arr, "RGB").show()
 
 
