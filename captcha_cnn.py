@@ -11,21 +11,21 @@ import tensorflow as tf
 
 
 class CaptchaCNN(object):
-    def __init__(self, img_width, img_height, num_of_chars, num_of_labels, input_channels, filter_sizes, num_filters,
-                 maxpool_sizes, hidden_size):
+    def __init__(self, img_width, img_height, num_of_labels, num_of_classes, input_channels,
+                 filter_sizes, num_filters, maxpool_sizes, hidden_size):
         """
         :param img_width:
         :param img_height:
-        :param num_of_chars: 一张图片中的字符个数,比如4个或6个
-        :param num_of_labels: 每种字符可能出现的情况数,比如a-zA-Z0-9 共62
+        :param num_of_labels:
+        :param num_of_classes:
+        :param input_channels:
         :param filter_sizes:
         :param num_filters:
         :param maxpool_sizes:
         :param hidden_size:
         """
         self.images = tf.placeholder(tf.float32, shape=[None, img_height, img_width, input_channels], name="input_x")
-        self.labels = tf.placeholder(tf.float32, shape=[None, num_of_chars * num_of_labels],
-                                     name="input_y")  # 二维list [None, 6]
+        self.labels = tf.placeholder(tf.float32, shape=[None, num_of_labels * num_of_classes], name="input_y")
         self._batch_size = tf.shape(self.images)[0]  # int32
 
         # conv1

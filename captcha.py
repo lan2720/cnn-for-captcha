@@ -13,23 +13,9 @@ import glob
 import cPickle
 import shutil
 import numpy as np
+from configs import *
 from tensorflow.contrib.learn.python.learn.datasets import base
 from CaptchaGenerator.generate_captcha import create_validate_code
-
-_letter_cases = "abdefghmnpqrstwxyz"  # 小写字母，去除可能干扰的c i j k l o u v 18
-_upper_cases = "ABDEFHMNPQRSTWXYZ"  # 大写字母，去除可能干扰的C G I J K L O U V 17
-_numbers = ''.join(map(str, range(2, 10)))  # 数字，去除0，1 (8)
-init_chars = ''.join((_letter_cases, _upper_cases, _numbers))
-chars = dict(zip(init_chars, range(len(init_chars))))
-
-BATCH_SIZE = 10000
-TRAIN_SIZE = 20000
-VALIDATION_SIZE = 5000
-TEST_SIZE = 10000
-DATA_BATCHES_DIR = os.path.join(os.path.dirname(__file__), "data-batches-py")
-
-NUM_OF_LABELS = 6
-NUM_OF_CLASSES = len(chars)
 
 
 def dump_batch(filename):
@@ -104,6 +90,8 @@ def read_data_sets(data_dir,
     train_images = train_images[validation_size:]
     train_labels = train_labels[validation_size:]
 
+    # Here Preprocessing
+
     train = DataSet(train_images, train_labels)
     validation = DataSet(validation_images,
                          validation_labels)
@@ -139,7 +127,7 @@ def dense_to_one_hot(labels_dense, num_classes):
 
     num_data = labels_dense.shape[0]
     index_offset = np.arange(num_data * num_labels) * num_classes
-    labels_one_hot = np.zeros((num_data, num_labels * num_classes))
+    labels_one_hot = np.zeros((num_data, num_labels * num_classes), dtype=np.int64)
     labels_offset = index_offset + labels_dense.ravel()
     labels_one_hot.flat[labels_offset] = 1
     return labels_one_hot
@@ -185,6 +173,7 @@ class DataSet(object):
     def epochs_completed(self):
         return self._epochs_completed
 
+    # this func is no use if use shuffle_batch api
     def next_batch(self, batch_size):
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
@@ -210,6 +199,7 @@ def main():
     print(datasets.train.labels.shape)
     print(datasets.validation.labels.shape)
     print(datasets.test.labels.shape)
+    print(datasets.test.labels.dtype)
 
 
 if __name__ == '__main__':
