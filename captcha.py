@@ -28,6 +28,9 @@ VALIDATION_SIZE = 5000
 TEST_SIZE = 10000
 DATA_BATCHES_DIR = os.path.join(os.path.dirname(__file__), "data-batches-py")
 
+NUM_OF_LABELS = 6
+NUM_OF_CLASSES = len(chars)
+
 
 def dump_batch(filename):
     d = {'data': [], 'labels': []}
@@ -129,6 +132,11 @@ def dense_to_one_hot(labels_dense, num_classes):
         num_labels = labels_dense.shape[1]
     else:
         raise Exception("labels_dense has an invalid dimension %d" % labels_dim)
+
+    if num_labels != NUM_OF_LABELS:
+        raise ValueError('The num of data labels %d does not match global param NUM_OF_LABELS %d.' %
+                         (num_labels, NUM_OF_LABELS))
+
     num_data = labels_dense.shape[0]
     index_offset = np.arange(num_data * num_labels) * num_classes
     labels_one_hot = np.zeros((num_data, num_labels * num_classes))

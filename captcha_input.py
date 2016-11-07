@@ -10,8 +10,12 @@ from __future__ import print_function
 
 import os
 import tensorflow as tf
-from captcha import read_data_sets
-from captcha import DATA_BATCHES_DIR, TRAIN_SIZE, VALIDATION_SIZE, TEST_SIZE
+from captcha import read_data_sets, DATA_BATCHES_DIR, \
+    TRAIN_SIZE, VALIDATION_SIZE, NUM_OF_LABELS, NUM_OF_CLASSES
+
+HEIGHT = 25
+WIDTH = 96
+NUM_CHANNELS = 3
 
 TFRecord_dir = os.path.join(os.path.dirname(__file__), "tfrecords")
 
@@ -20,8 +24,8 @@ def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
-def _int64_list_feature(value):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+def _floats_feature(value):  # multiple float
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 
 def _bytes_feature(value):
@@ -38,34 +42,47 @@ def convert_to(data_set, name):
     num_examples = data_set.num_examples
 
     if images.shape[0] != num_examples:
-        raise ValueError('Image size %d dose not match dataset size %d.' %
+        raise ValueError('Image size %d does not match dataset size %d.' %
                          (images.shape[0], num_examples))
     rows = images.shape[1]
     cols = images.shape[2]
     depth = images.shape[3]
-    label_dim = labels.shape[1]
+
+    # Check some global settings
+    if rows != HEIGHT:
+        raise ValueError('Image rows %d does not match global param HEIGHT %d.' %
+                         (rows, HEIGHT))
+    if cols != WIDTH:
+        raise ValueError('Image cols %d does not match global param WIDTH %d.' %
+                         (cols, WIDTH))
+    if depth != NUM_CHANNELS:
+        raise ValueError('Image depth %d does not match global param NUM_CHANNELS %d.' %
+                         (depth, NUM_CHANNELS))
 
     filename = os.path.join(TFRecord_dir, name + '.tfrecords')
     print("Writing", filename)
     writer = tf.python_io.TFRecordWriter(filename)
     for index in range(num_examples):
         image_raw = images[index].tostring()
-        label_raw = labels[index].tostring()  # a list of size `num_of_labels` or `num_of_labels*num_of_classes`
+        label = labels[index].tolist()  # a list of size `num_of_labels` or `num_of_labels*num_of_classes`
         example = tf.train.Example(features=tf.train.Features(feature={
             'height': _int64_feature(rows),
             'width': _int64_feature(cols),
             'depth': _int64_feature(depth),
-            'label_dim': _int64_feature(label_dim),
-            'label_raw': _bytes_feature(label_raw),
+            'label': _floats_feature(label),
             'image_raw': _bytes_feature(image_raw)
         }))
         writer.write(example.SerializeToString())
     writer.close()
 
 
-def read_and_decode(filename_queue):
+def read_and_decode(filename_queue, one_hot):
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
+    if one_hot:
+        label_dim = NUM_OF_LABELS * NUM_OF_CLASSES
+    else:
+        label_dim = NUM_OF_LABELS
     features = tf.parse_single_example(
         serialized_example,
         # Defaults are not specified since both keys are required.
@@ -73,18 +90,16 @@ def read_and_decode(filename_queue):
             'height': tf.FixedLenFeature([], tf.int64),
             'width': tf.FixedLenFeature([], tf.int64),
             'depth': tf.FixedLenFeature([], tf.int64),
-            'label_dim': tf.FixedLenFeature([], tf.int64),
             'image_raw': tf.FixedLenFeature([], tf.string),
-            'label_raw': tf.FixedLenFeature([], tf.string),
+            'label': tf.FixedLenFeature([label_dim], tf.float32),
         })
 
     image = tf.decode_raw(features['image_raw'], tf.uint8)
-    label = tf.decode_raw(features['label_raw'], tf.int32)
+    label = tf.cast(features['label'], tf.float32)
     height = tf.cast(features['height'], tf.int32)
     width = tf.cast(features['width'], tf.int32)
     depth = tf.cast(features['depth'], tf.int32)
-    label_dim = tf.cast(features['label_dim'], tf.int32)
-    return image, label, height, width, depth, label_dim
+    return image, label, height, width, depth
 
 
 # 写数据主函数
@@ -101,15 +116,11 @@ def preprocessed_inputs(data_dir, one_hot, batch_size):
     filename_queue = tf.train.string_input_producer(
         tf.train.match_filenames_once(os.path.join(data_dir, "*.tfrecords"))
     )
-    image, label, height, width, depth, label_dim = read_and_decode(filename_queue)
+    image, label, height, width, depth = read_and_decode(filename_queue, one_hot=one_hot)
     float_image = tf.cast(image, tf.float32)
     reshaped_image = tf.reshape(float_image, tf.pack([height, width, depth]))
-    reshaped_image.set_shape([25, 96, 3])
-    reshaped_label = tf.reshape(label, [label_dim])
-    if one_hot:
-        reshaped_label.set_shape([258])
-    else:
-        reshaped_label.set_shape([6])
+    reshaped_image.set_shape([HEIGHT, WIDTH, NUM_CHANNELS])
+
     normalized_image = tf.image.per_image_whitening(reshaped_image)
 
     min_fraction_of_examples_in_queue = 0.4
@@ -150,8 +161,8 @@ def main():
     # datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=True)
     # generate_datasets_tfrecords(DATA_BATCHES_DIR, one_hot=True)
     images_batch, labels_batch = preprocessed_inputs(DATA_BATCHES_DIR, one_hot=True, batch_size=50)
-    print("images_batch shape: %s", images_batch.shape)
-    print("labels_batch shape: %s", labels_batch.shape)
+    print("images_batch shape:", images_batch.get_shape())
+    print("labels_batch shape:", labels_batch.get_shape())
 
 
 if __name__ == '__main__':
