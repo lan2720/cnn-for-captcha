@@ -15,7 +15,7 @@ from captcha_input import generate_datasets_tfrecords, input_pipeline
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 # Model Hyperparameters
-tf.flags.DEFINE_float("init_learning_rate", 1e-6, "The initial learning rate")
+tf.flags.DEFINE_float("init_learning_rate", 1e-3, "The initial learning rate")
 # Misc Parameters
 tf.flags.DEFINE_string("checkpoint_dir", '', "Indicates the checkpoint directory")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model every certain steps (default: 100)")
@@ -36,7 +36,7 @@ with tf.Graph().as_default():
     sess = tf.Session(config=session_conf)
     with sess.as_default():
         # Train batch data
-        train_images_batch, train_labels_batch = input_pipeline(one_hot=False, batch_size=128, num_epochs=200,
+        train_images_batch, train_labels_batch = input_pipeline(one_hot=False, batch_size=60, num_epochs=200,
                                                                 name='train')
         # Validation batch data
         # valid_images_batch, valid_labels_batch = input_pipeline(one_hot=False, batch_size=50, num_epochs=1,
@@ -45,8 +45,9 @@ with tf.Graph().as_default():
         captchaCNN = CaptchaCNN(filter_sizes=[5, 5, 3, 3],
                                 num_of_filters=[32, 32, 32, 32],
                                 filter_strides=[1, 1, 1, 1],
-                                maxpool_sizes=[2, 2, 2, 2],
-                                maxpool_strides=[1, 1, 1, 1],
+                                pool_sizes=[2, 2, 2, 2],
+                                pool_strides=[1, 1, 1, 1],
+                                pool_types=['max', 'avg', 'avg', 'avg'],
                                 input_channels=NUM_CHANNELS,
                                 hidden_sizes=[256],
                                 num_of_labels=NUM_OF_LABELS,
