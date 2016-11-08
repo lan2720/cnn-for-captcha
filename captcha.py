@@ -80,6 +80,16 @@ def read_data_sets(data_dir,
     train_images, train_labels = extract_images_and_labels(TRAIN_DATA, one_hot=one_hot)
     test_images, test_labels = extract_images_and_labels(TEST_DATA, one_hot=one_hot)
 
+    if train_images.shape[0] != TRAIN_SIZE:
+        raise ValueError(
+            "Train and valid data size %d doesn't equals to param TRAIN_SIZE %d."
+                .format(train_images.shape[0], TRAIN_SIZE))
+
+    if test_images.shape[0] != TEST_SIZE:
+        raise ValueError(
+            "Test data size %d doesn't equals to param TEST_SIZE %d."
+                .format(test_images.shape[0], TEST_SIZE))
+
     if not 0 <= validation_size <= len(train_images):
         raise ValueError(
             'Validation size should be between 0 and {}. Received: {}.'
@@ -90,7 +100,12 @@ def read_data_sets(data_dir,
     train_images = train_images[validation_size:]
     train_labels = train_labels[validation_size:]
 
-    # Here Preprocessing
+    # Here Preprocessing: mean and std
+    X_mean = np.mean(train_images, axis=0)
+    X_std = np.std(train_images, axis=0)
+    train_images = (train_images - X_mean) / (X_std + 0.00001)
+    validation_images = (validation_images - X_mean) / (X_std + 0.00001)
+    test_images = (test_images - X_mean) / (X_std + 0.00001)
 
     train = DataSet(train_images, train_labels)
     validation = DataSet(validation_images,
@@ -194,8 +209,8 @@ class DataSet(object):
 
 
 def main():
-    # generate_data_sets()
-    datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=True)
+    generate_data_sets()
+    datasets = read_data_sets(DATA_BATCHES_DIR, one_hot=False)
     print(datasets.train.labels.shape)
     print(datasets.validation.labels.shape)
     print(datasets.test.labels.shape)

@@ -19,8 +19,8 @@ NUM_CHANNELS = 3
 
 # Data
 BATCH_SIZE = 10000
-TRAIN_SIZE = 20000
-VALIDATION_SIZE = 5000
+TRAIN_SIZE = 150000
+VALIDATION_SIZE = 0
 TEST_SIZE = 10000
 DATA_BATCHES_DIR = os.path.join(os.path.dirname(__file__), "data-batches-py")
 TFRecord_dir = os.path.join(os.path.dirname(__file__), "tfrecords")

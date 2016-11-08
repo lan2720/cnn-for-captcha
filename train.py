@@ -1,139 +1,193 @@
-# coding: utf-8
+# coding=utf-8
+from __future__ import print_function
 
-import os
 import time
 import datetime
+from configs import *
 import tensorflow as tf
-import numpy as np
-from data_helpers import Dataset
 from captcha_cnn import CaptchaCNN
+from prediction import prediction_for_multi_labels
+from loss import loss_for_multi_labels
+from metrics import accuracy_for_multi_labels
+from captcha_input import generate_datasets_tfrecords, input_pipeline
 
+# Define parameters
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 # Model Hyperparameters
-tf.flags.DEFINE_float("init_learning_rate", 1e-4, "The initial learning rate")
+tf.flags.DEFINE_float("init_learning_rate", 1e-6, "The initial learning rate")
 # Misc Parameters
-tf.flags.DEFINE_string("checkpoint", '', "Resume checkpoint")
+tf.flags.DEFINE_string("checkpoint_dir", '', "Indicates the checkpoint directory")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model every certain steps (default: 100)")
-
+tf.flags.DEFINE_integer("save_every", 5000, "Save model every certain steps (default: 1000)")
+tf.flags.DEFINE_string("optimizer", "momentum", "The training algorithm to use")
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
-
-FLAGS = tf.flags.FLAGS
+tf.flags.DEFINE_string("mode", "train_from_scratch", "Option mode: train, train_from_scratch, inference")
 
 print("Loading dataset...")
-dataset = Dataset(extfile="150000.npz")
-X = dataset.images  # (149998, 25, 96, 3)
-y = dataset.labels  # (149998, 258)
-X_train, X_test = X[:50000], X[-100:]
-y_train, y_test = y[:50000], y[-100:]
-# normalize( only compute mean and std on trainset)
-X_mean = np.mean(X_train, axis=0)
-X_std = np.std(X_train, axis=0)
-X_train = (X_train - X_mean) / (X_std + 0.00001)
-X_test = (X_test - X_mean) / (X_std + 0.00001)
+# 如果存在tfrecords直接使用，如果要重新生成，则先删除tfrecords文件夹，再运行
+if not os.path.exists(os.path.join(os.path.dirname(__file__), "tfrecords")):
+    generate_datasets_tfrecords(DATA_BATCHES_DIR, one_hot=False)
 
-
+# Create session to run graph
 with tf.Graph().as_default():
     session_conf = tf.ConfigProto(
         log_device_placement=FLAGS.log_device_placement)
     sess = tf.Session(config=session_conf)
     with sess.as_default():
-        model = CaptchaCNN(img_width=96,
-                           img_height=25,
-                           num_of_chars=6,
-                           num_of_labels=dataset.num_of_labels,
-                           input_channels=3,
-                           filter_sizes=[2, 2, 2],
-                           num_filters=[32, 64, 64],
-                           maxpool_sizes=[2, 2, 2],
-                           hidden_size=1024)
+        # Train batch data
+        train_images_batch, train_labels_batch = input_pipeline(one_hot=False, batch_size=128, num_epochs=200,
+                                                                name='train')
+        # Validation batch data
+        # valid_images_batch, valid_labels_batch = input_pipeline(one_hot=False, batch_size=50, num_epochs=1,
+        #                                                         name='validation')
+        # Define model
+        captchaCNN = CaptchaCNN(filter_sizes=[5, 5, 3, 3],
+                                num_of_filters=[32, 32, 32, 32],
+                                filter_strides=[1, 1, 1, 1],
+                                maxpool_sizes=[2, 2, 2, 2],
+                                maxpool_strides=[1, 1, 1, 1],
+                                input_channels=NUM_CHANNELS,
+                                hidden_sizes=[256],
+                                num_of_labels=NUM_OF_LABELS,
+                                num_of_classes=NUM_OF_CLASSES
+                                )
 
-        # Define Training procedure
-        global_step = tf.Variable(0, name="global_step", trainable=False)
-        # optimizer = tf.train.AdamOptimizer(1e-3, epsilon=1e-6)
-        optimizer = tf.train.AdamOptimizer(FLAGS.init_learning_rate)
-        grads_and_vars = optimizer.compute_gradients(model.loss)
-        # print "trainable variables:"
-        # print tf.trainable_variables()
-        train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+        # Define model
+        captchaCNN.flow(train_images_batch)
 
-        # Output directory for models and summaries
-        if FLAGS.checkpoint == "":
-            timestamp = str(int(time.time()))
-            out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
-            print("Writing to {}\n".format(out_dir))
+        # Define loss
+        loss = loss_for_multi_labels(captchaCNN.outputs, train_labels_batch, NUM_OF_LABELS, NUM_OF_CLASSES)
+
+        # Define predictions
+        predictions = prediction_for_multi_labels(captchaCNN.outputs, NUM_OF_LABELS, NUM_OF_CLASSES)
+
+        # Define accuracy
+        accuracy = accuracy_for_multi_labels(predictions, train_labels_batch)
+
+        # learning rate decay
+        with tf.device("/cpu:0"):
+            global_step = tf.Variable(0, name="global_step", trainable=False)
+        learning_rate = tf.train.exponential_decay(FLAGS.init_learning_rate, global_step,
+                                                   3000, 0.96, staircase=True)
+
+        # Define optimizer
+        print("Use the optimizer: {}".format(FLAGS.optimizer))
+        if FLAGS.optimizer == "sgd":
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+        elif FLAGS.optimizer == "momentum":
+            optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9, use_nesterov=True)
+        elif FLAGS.optimizer == "adadelta":
+            optimizer = tf.train.AdadeltaOptimizer(learning_rate)
+        elif FLAGS.optimizer == "adagrad":
+            optimizer = tf.train.AdagradOptimizer(learning_rate)
+        elif FLAGS.optimizer == "adam":
+            optimizer = tf.train.AdamOptimizer(learning_rate)
+        elif FLAGS.optimizer == "ftrl":
+            optimizer = tf.train.FtrlOptimizer(learning_rate)
+        elif FLAGS.optimizer == "rmsprop":
+            optimizer = tf.train.RMSPropOptimizer(learning_rate)
         else:
-            out_dir = FLAGS.checkpoint
+            raise ValueError("Unknown optimizer: {}".format(FLAGS.optimizer))
 
-        # Summaries for loss and accuracy
-        loss_summary = tf.scalar_summary("loss", model.loss)
-        acc_summary = tf.scalar_summary("accuracy", model.accuracy)
+        # Define train_op
+        train_op = optimizer.minimize(loss, global_step=global_step)
 
-        # Train Summaries
-        train_summary_op = tf.merge_summary([loss_summary, acc_summary])
-        train_summary_dir = os.path.join(out_dir, "summaries", "train")
-        train_summary_writer = tf.train.SummaryWriter(train_summary_dir, sess.graph)
+        # Add an op to initialize the variables
+        init_op = tf.initialize_all_variables()
 
-        # Dev summaries
-        dev_summary_op = tf.merge_summary([loss_summary, acc_summary])
-        dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
-        dev_summary_writer = tf.train.SummaryWriter(dev_summary_dir, sess.graph)
+        # Add ops to save and restore all the variables.
+        saver = tf.train.Saver()
 
-        # Initialize all variables
-        sess.run(tf.initialize_all_variables())
+        # 模式选择
+        if FLAGS.mode == "train_from_scratch" or FLAGS.mode == "train":
+            if FLAGS.mode == "train_from_scratch":
+                timestamp = str(int(time.time()))
+                out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+                checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+                checkpoint_prefix = os.path.join(checkpoint_dir, "model")
+                if not os.path.exists(checkpoint_dir):
+                    os.makedirs(checkpoint_dir)
+                print("Train from scratch. Writing to {}\n".format(out_dir))
+            else:
+                if not FLAGS.checkpoint_dir:  # runs/146334553996
+                    raise ValueError(
+                        "Now mode is `{}`. Please give a checkpoint dir. (e.g: runs/1476415419)".format(FLAGS.mode))
+                out_dir = FLAGS.checkpoint_dir
+                ckpt = tf.train.get_checkpoint_state(os.path.join(out_dir, "checkpoints"))
+                if ckpt and ckpt.model_checkpoint_path:
+                    print("Continue training from the model {}".format(
+                        ckpt.model_checkpoint_path))
+                    saver.restore(sess, ckpt.model_checkpoint_path)
+                else:
+                    raise ValueError("No valid checkpoint model in {}".format(FLAGS.checkpoint_dir))
 
+            # 只有train和train_from_scratch需要summary
+            # Summaries for loss and accuracy
+            loss_summary = tf.scalar_summary("loss", loss)
+            acc_summary = tf.scalar_summary("accuracy", accuracy)
 
-        def train_step(x_batch, y_batch):
-            """
-            A single training step
-            """
-            feed_dict = {
-                model.images: x_batch,
-                model.labels: y_batch
-            }
+            # Train Summaries
+            train_summary_op = tf.merge_summary([loss_summary, acc_summary])
+            train_summary_dir = os.path.join(out_dir, "summaries", "train")
+            train_summary_writer = tf.train.SummaryWriter(train_summary_dir, sess.graph)
 
-            _, step, summaries, accuracy, individual_accuracy, loss, predictions = sess.run(
-                [train_op, global_step, train_summary_op, model.accuracy, model.individual_accuracy, model.loss,
-                 model.predictions], feed_dict)
-            time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
+            # Dev summaries
+            dev_summary_op = tf.merge_summary([loss_summary, acc_summary])
+            dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
+            dev_summary_writer = tf.train.SummaryWriter(dev_summary_dir, sess.graph)
 
-            # for pred, truth in zip(predictions.tolist(), y_batch.tolist())[:10]:
-            # 	ls = []
-            # 	for i in range(6):
-            # 		index = np.argmax(np.asarray(truth[i * dataset.num_of_labels:(i + 1) * dataset.num_of_labels]))
-            # 		ls.append(index)
-            # 	print(
-            # 		"{}  {}".format("".join([dataset.chars[i] for i in pred]),
-            # 						"".join([dataset.chars[i] for i in ls])))
+            sess.run(init_op)
+            sess.run(tf.initialize_local_variables())
 
-            print("{}: step {}, loss {:g}, individual_acc {:g}, acc {:g}".format(time_str, step, loss,
-                                                                                 individual_accuracy, accuracy))
+            # Get coordinator and run queues to read data
+            coord = tf.train.Coordinator()
+            threads = tf.train.start_queue_runners(coord=coord, sess=sess)
 
-            train_summary_writer.add_summary(summaries, step)
+            # print(train_images_batch[0].eval())
 
+            try:
+                while not coord.should_stop():
+                    _, train_summaries, loss_value, preds_, acc, step = sess.run(
+                        [train_op, train_summary_op, loss, predictions, accuracy, global_step])
+                    time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
+                    print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss_value, acc))
+                    print("predictions[:10]:\n", preds_[:10])
+                    # if step % FLAGS.evaluate_every == 0:
+                    #     accuracy_value, auc_value, summary_value = sess.run(
+                    #         [accuracy, summary_op])
+                    #     end_time = datetime.datetime.now()
+                    #     print("[{}] Step: {}, loss: {}, accuracy: {}, auc: {}".format(
+                    #         end_time - start_time, step, loss_value, accuracy_value,
+                    #         auc_value))
+                    train_summary_writer.add_summary(train_summaries, step)
 
-        def test_step():
-            for x_batch, y_batch in dataset.batch_generator(X_test, y_test, batch_size=100, num_of_epoches=1,
-                                                            shuffle=False):
-                feed_dict = {
-                    model.images: x_batch,
-                    model.labels: y_batch
-                }
-                step, loss, accuracy, individual_accuracy = sess.run(
-                    [global_step, model.loss, model.accuracy, model.individual_accuracy], feed_dict)
-                time_str = datetime.datetime.now().strftime("%d, %b %Y %H:%M:%S")
-                print("{}: step {}, loss {:g}, individual_acc {:g}, acc {:g}".format(time_str, step, loss,
-                                                                                     individual_accuracy, accuracy))
+                    if step % FLAGS.save_every == 0:
+                        path = saver.save(sess, checkpoint_prefix, global_step=step)
+                        print("Saved model to {}\n".format(path))
 
+            except tf.errors.OutOfRangeError:
+                print("Done training after reading all data")
+            finally:
+                coord.request_stop()
 
-        # Training loop. For each batch...
-        for x_batch, y_batch in dataset.batch_generator(X_train, y_train, batch_size=64, num_of_epoches=200,
-                                                        shuffle=True):
-            train_step(x_batch, y_batch)
-            current_step = tf.train.global_step(sess, global_step)
-            if current_step % FLAGS.evaluate_every == 0:
-                print("\nEvaluation:")
-                test_step()
-                print("")
+            # Wait for threads to exit
+            coord.join(threads)
 
-                # if current_step % FLAGS.checkpoint_every == 0:
-                # 	path = saver.save(sess, checkpoint_prefix, global_step=current_step)
-                # 	print("Saved model checkpoint to {}\n".format(path))
+        # elif FLAGS.mode == "inference":
+        #     print("Start to run inference")
+        #     if not FLAGS.checkpoint_dir:
+        #         raise ValueError(
+        #             "Now mode is `{}`. Please give a checkpoint dir. (e.g: runs/1476415419)".format(FLAGS.mode))
+        #     start_time = datetime.datetime.now()
+        #     inference_data = xxxx
+        #
+        #     # Restore weights from model file
+        #     ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
+        #     if ckpt and ckpt.model_checkpoint_path:
+        #         print("Use the model {}".format(ckpt.model_checkpoint_path))
+        #         saver.restore(sess, ckpt.model_checkpoint_path)
+        #         # todo: 在model中定义inference这个variable_scope
+        #         inference_result = sess.run(inference_op, feed_dict={inference_images: inference_data})
+        else:
+            pass
